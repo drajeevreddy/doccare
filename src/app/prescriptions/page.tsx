@@ -14,10 +14,12 @@ import { getPrescriptions, createPrescription } from "@/lib/queries";
 
 interface PrescriptionItem {
   id: string;
+  patient_name?: string;
   patients: { first_name: string; last_name: string } | null;
   doctors: { first_name: string; last_name: string } | null;
   created_at: string;
   status: string;
+  is_active?: boolean;
   diagnosis: string;
 }
 
@@ -202,8 +204,10 @@ export default function PrescriptionsPage() {
           ) : (
             <div className="divide-y divide-border">
               {filteredPrescriptions.map((rx) => {
-                const patientName = rx.patients ? `${rx.patients.first_name} ${rx.patients.last_name}` : "Unknown";
+                const patientName = rx.patient_name || (rx.patients ? `${rx.patients.first_name} ${rx.patients.last_name}` : "Unknown");
                 const doctorName = rx.doctors ? `${rx.doctors.first_name} ${rx.doctors.last_name}` : "Unknown";
+                // prescriptions has no `status` column — derive it from is_active.
+                const rxStatus = rx.status || (rx.is_active === false ? "inactive" : "active");
                 return (
                   <div key={rx.id} className="flex items-center gap-4 px-5 py-4 hover:bg-hover/50 transition-colors">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-light">
@@ -221,7 +225,7 @@ export default function PrescriptionsPage() {
                       </div>
                     </div>
                     <div className="text-right text-xs text-secondary hidden sm:block">{rx.diagnosis || "--"}</div>
-                    <Badge status={rx.status as any} />
+                    <Badge status={rxStatus as any} />
                     <div className="flex items-center gap-1">
                       <button onClick={() => {
                         try {

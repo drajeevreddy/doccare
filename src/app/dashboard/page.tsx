@@ -18,6 +18,7 @@ interface Metric {
 interface QueueItem {
   id: string;
   token: string;
+  patient_name?: string;
   patients: { first_name: string; last_name: string } | null;
   doctor_name: string;
   status: string;
@@ -43,25 +44,36 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    Promise.all([
-      getDashboardMetrics(),
-      getAppointments(today),
-      getQueue(),
-      getRecentActivity(),
-      getPatients(),
-    ]).then(([m, appts, q, acts, patients]) => {
-      setMetrics([
-        { label: "Appointments Today", value: String(m.appointmentsToday), change: "today", icon: Calendar, trend: "up" },
-        { label: "Active Patients", value: String(m.totalPatients), change: "total registered", icon: Users, trend: "up" },
-        { label: "Revenue Today", value: formatCurrency(m.revenueToday), change: "collected today", icon: TrendingUp, trend: "up" },
-        { label: "Follow-Ups Due", value: String(m.followUpsDue), change: "scheduled", icon: Activity, trend: "down" },
-      ]);
-      setAppointments(appts);
-      setQueue(q as QueueItem[]);
-      setActivities(acts as Activity[]);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    // Local-time "today" (toISOString uses UTC and can be off by a day in IST).
+    const now = new Date();
+    const today =
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    const load = () => {
+      Promise.all([
+        getDashboardMetrics(),
+        getAppointments(today),
+        getQueue(),
+        getRecentActivity(),
+        getPatients(),
+      ]).then(([m, appts, q, acts]) => {
+        setMetrics([
+          { label: "Appointments Today", value: String(m.appointmentsToday), change: "today", icon: Calendar, trend: "up" },
+          { label: "Active Patients", value: String(m.totalPatients), change: "total registered", icon: Users, trend: "up" },
+          { label: "Revenue Today", value: formatCurrency(m.revenueToday), change: "collected today", icon: TrendingUp, trend: "up" },
+          { label: "Follow-Ups Due", value: String(m.followUpsDue), change: "scheduled", icon: Activity, trend: "down" },
+        ]);
+        setAppointments(appts);
+        setQueue(q as QueueItem[]);
+        setActivities(acts as Activity[]);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    };
+
+    load();
+    // Auto-refresh every 30s so the dashboard reflects new data without a manual reload.
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const inProgress = queue.filter((q) => q.status === "in_consultation").length;
@@ -123,7 +135,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-primary">
-                          {item.patients ? `${item.patients.first_name} ${item.patients.last_name}` : "Unknown"}
+                          {item.patient_name || (item.patients ? `${item.patients.first_name} ${item.patients.last_name}` : "Unknown")}
                         </p>
                         <p className="text-xs text-secondary">{item.doctor_name}</p>
                       </div>
@@ -157,8 +169,8 @@ export default function DashboardPage() {
                       <HeartPulse className="h-3.5 w-3.5 text-accent" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-primary">{apt.patients?.first_name} {apt.patients?.last_name}</p>
-                      <p className="text-xs text-secondary">{apt.appointment_time?.slice(0, 5)} &middot; {apt.doctor_name}</p>
+                    <p className="text-sm font-medium text-primary">{apt.patient_name || (apt.patients ? `${apt.patients.first_name} ${apt.patients.last_name}` : "Patient")}</p>
+                    <p className="text-xs text-secondary">{apt.appointment_time?.slice(0, 5)} &middot; {apt.doctor_name}</p>
                     </div>
                     <Badge status={apt.status as any} />
                   </div>
@@ -191,7 +203,7 @@ export default function DashboardPage() {
                       <div className="h-2 w-2 rounded-full bg-accent" />
                       <div>
                         <p className="text-sm text-primary">{act.action}</p>
-                        <p className="text-xs text-secondary">{act.user_name}</p>
+                        <p className="text-xs text-secondary">{act.user_name || "System"}</p>
                       </div>
                     </div>
                   </div>

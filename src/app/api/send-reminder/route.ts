@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const db = createAdminClient();
     await db.from("activity_logs").insert([{
       action: `Reminder sent to ${patientName} for ${appointmentDate || "—"} at ${appointmentTime?.slice(0,5) || "—"} with ${doctorName || "—"} via ${channel || "both"}`,
-      user_name: "System",
+      resource_type: "reminder",
       created_at: new Date().toISOString(),
     }]);
 

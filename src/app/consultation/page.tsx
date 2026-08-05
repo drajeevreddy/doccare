@@ -12,6 +12,7 @@ import { getQueue } from "@/lib/queries";
 interface QueueItem {
   id: string;
   patient_id: string;
+  patient_name?: string;
   patients: { first_name: string; last_name: string } | null;
   doctor_name: string;
   token: string;
@@ -80,7 +81,7 @@ export default function ConsultationPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-primary">
-                        {c.patients ? `${c.patients.first_name} ${c.patients.last_name}` : "Unknown"}
+                        {c.patient_name || (c.patients ? `${c.patients.first_name} ${c.patients.last_name}` : "Unknown")}
                       </p>
                       <p className="text-xs text-secondary">{c.doctor_name}</p>
                     </div>
@@ -106,10 +107,10 @@ export default function ConsultationPage() {
                   <div key={c.id} className="rounded-lg border border-accent bg-accent-light/30 p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <Avatar name={c.patients ? `${c.patients.first_name} ${c.patients.last_name}` : "U"} size="lg" />
+                        <Avatar name={c.patient_name || (c.patients ? `${c.patients.first_name} ${c.patients.last_name}` : "U")} size="lg" />
                         <div>
                           <p className="text-sm font-semibold text-primary">
-                            {c.patients ? `${c.patients.first_name} ${c.patients.last_name}` : "Unknown"}
+                            {c.patient_name || (c.patients ? `${c.patients.first_name} ${c.patients.last_name}` : "Unknown")}
                           </p>
                           <p className="text-xs text-secondary">{c.doctor_name} &middot; Token {c.token}</p>
                         </div>

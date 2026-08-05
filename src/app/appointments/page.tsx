@@ -77,7 +77,11 @@ function getWeekDates(baseDate: Date) {
 }
 
 function formatDateKey(d: Date) {
-  return d.toISOString().split("T")[0];
+  // Local-time key (toISOString is UTC and can shift the day in IST).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function formatDayName(d: Date) {

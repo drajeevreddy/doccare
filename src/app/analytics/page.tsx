@@ -391,7 +391,7 @@ export default function AnalyticsPage() {
                           <div className="h-2 w-2 rounded-full bg-accent shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-primary truncate">{act.action}</p>
-                            <p className="text-xs text-secondary">{act.user_name}</p>
+                            <p className="text-xs text-secondary">{act.user_name || "System"}</p>
                           </div>
                           <span className="text-[10px] text-secondary/60 shrink-0">
                             {act.created_at ? (() => {

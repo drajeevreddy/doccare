@@ -15,6 +15,7 @@ import { getInvoices, createInvoice, markInvoicePaid } from "@/lib/queries";
 
 interface Invoice {
   id: string;
+  patient_name?: string;
   patients: { first_name: string; last_name: string } | null;
   created_at: string;
   total: number;
@@ -46,7 +47,7 @@ export default function BillingPage() {
   const filteredInvoices = invoices.filter(
     (inv) =>
       inv.id.toLowerCase().includes(search.toLowerCase()) ||
-      (inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "").toLowerCase().includes(search.toLowerCase())
+      (inv.patient_name || (inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "")).toLowerCase().includes(search.toLowerCase())
   );
 
   const totalRevenue = invoices.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
@@ -160,7 +161,7 @@ export default function BillingPage() {
                     <tr key={inv.id} className="hover:bg-hover/50 transition-colors">
                       <td className="px-5 py-3 text-sm font-medium text-primary">{inv.id}</td>
                       <td className="px-5 py-3 text-sm text-secondary">
-                        {inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "Unknown"}
+                        {inv.patient_name || (inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "Unknown")}
                       </td>
                       <td className="px-5 py-3 text-sm text-secondary">{formatDate(inv.created_at)}</td>
                       <td className="px-5 py-3 text-sm font-medium text-primary">{formatCurrency(inv.total || 0)}</td>
@@ -185,7 +186,7 @@ export default function BillingPage() {
                             try {
                               downloadInvoicePDF({
                                 invoiceNumber: inv.id.slice(0, 8).toUpperCase(),
-                                patientName: inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "Patient",
+                                patientName: inv.patient_name || (inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "Patient"),
                                 date: formatDate(inv.created_at),
                                 dueDate: formatDate(inv.created_at),
                                 status: inv.status || "pending",
@@ -205,7 +206,7 @@ export default function BillingPage() {
                             try {
                               printInvoice({
                                 invoiceNumber: inv.id.slice(0, 8).toUpperCase(),
-                                patientName: inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "Patient",
+                                patientName: inv.patient_name || (inv.patients ? `${inv.patients.first_name} ${inv.patients.last_name}` : "Patient"),
                                 date: formatDate(inv.created_at),
                                 dueDate: formatDate(inv.created_at),
                                 status: inv.status || "pending",

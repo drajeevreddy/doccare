@@ -18,12 +18,61 @@ function getDb() {
 
 async function logActivity(action: string, userId?: string) {
   try {
+    // activity_logs has no user_name column and requires resource_type.
     await getDb().from("activity_logs").insert([{
       action,
-      user_name: userId || "System",
+      user_id: userId || null,
+      resource_type: "activity",
       created_at: new Date().toISOString(),
     }]);
   } catch {}
+}
+
+// ─── Helpers ───────────────────────────────────────────────
+// Write helper: PROPAGATES errors so the UI can surface a real failure.
+// (safeQuery swallows errors and returns a fallback, which made writes like
+// createAppointment appear to succeed when the row was never inserted.)
+async function writeQuery<T>(fn: () => Promise<T>, _fallback?: T | null): Promise<T> {
+  return await fn();
+}
+
+// Local-time date key ("YYYY-MM-DD"). Using toISOString() here is a UTC
+// serialization and can shift "today" by one day in timezones ahead of UTC
+// (e.g. India), making dashboards report the wrong date.
+function localDateKey(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Normalize the appointment type the UI sends (e.g. "Consultation",
+// "Follow-up", "Review", "New Patient") to the constrained values used by the
+// appointments.type CHECK constraint / analytics queries.
+function normalizeAppointmentType(t: string | undefined | null): string {
+  const v = (t || "").trim().toLowerCase();
+  const map: Record<string, string> = {
+    consultation: "consultation",
+    "follow-up": "follow_up",
+    followup: "follow_up",
+    "follow up": "follow_up",
+    follow: "follow_up",
+    review: "review",
+    "new patient": "consultation",
+    emergency: "emergency",
+    procedure: "procedure",
+  };
+  return map[v] || "consultation";
+}
+
+// Derive a 30 minute end_time from a "HH:MM" appointment_time.
+function deriveEndTime(appointmentTime?: string | null): string {
+  const start = (appointmentTime || "09:00").slice(0, 5);
+  const [h, m] = start.split(":").map(Number);
+  const total = h * 60 + m + 30;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
 }
 
 // ─── Patients ───────────────────────────────────────────────
@@ -51,7 +100,7 @@ export async function getPatientById(id: string) {
 }
 
 export async function createPatient(formData: Record<string, any>) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("patients")
       .insert([formData])
@@ -64,7 +113,7 @@ export async function createPatient(formData: Record<string, any>) {
 }
 
 export async function updatePatient(id: string, formData: Record<string, any>) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("patients")
       .update(formData)
@@ -94,7 +143,10 @@ export async function getAppointments(date?: string) {
 export async function getAppointmentsByMonth(year: number, month: number) {
   return safeQuery(async () => {
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+    // Build the last day of the month in LOCAL time — toISOString() here would
+    // shift the last day back by one for timezones ahead of UTC (e.g. India).
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     const { data, error } = await getDb()
       .from("appointments")
       .select("appointment_date, status")
@@ -112,14 +164,17 @@ export async function createAppointment(formData: {
   doctor_name: string;
   type: string;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
+    const appointment_time = formData.appointment_time || "09:00";
     const { data, error } = await getDb().from("appointments").insert([
       {
         patient_name: formData.patient_name,
         appointment_date: formData.appointment_date,
-        appointment_time: formData.appointment_time,
+        appointment_time,
+        start_time: appointment_time,
+        end_time: deriveEndTime(appointment_time),
         doctor_name: formData.doctor_name,
-        type: formData.type,
+        type: normalizeAppointmentType(formData.type),
         title: `Appointment - ${formData.patient_name}`,
         status: "scheduled",
       },
@@ -131,7 +186,7 @@ export async function createAppointment(formData: {
 }
 
 export async function cancelAppointment(id: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data: apt } = await getDb().from("appointments").select("patient_name").eq("id", id).single();
     const { error } = await getDb()
       .from("appointments")
@@ -144,11 +199,17 @@ export async function cancelAppointment(id: string) {
 }
 
 export async function rescheduleAppointment(id: string, appointment_date: string, appointment_time: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data: apt } = await getDb().from("appointments").select("patient_name").eq("id", id).single();
     const { error } = await getDb()
       .from("appointments")
-      .update({ appointment_date, appointment_time, status: "rescheduled" })
+      .update({
+        appointment_date,
+        appointment_time,
+        start_time: appointment_time || "09:00",
+        end_time: deriveEndTime(appointment_time),
+        status: "scheduled", // 'rescheduled' is not a valid appointment_status enum value
+      })
       .eq("id", id);
     if (error) throw new Error(error.message);
     await logActivity(`Rescheduled appointment for ${apt?.patient_name || id}`);
@@ -169,7 +230,7 @@ export async function getDoctors() {
 }
 
 export async function addDoctor(name: string, specialization: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("doctors")
       .insert([{ name, specialization, status: "active" }])
@@ -182,7 +243,7 @@ export async function addDoctor(name: string, specialization: string) {
 }
 
 export async function removeDoctor(id: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { error } = await getDb()
       .from("doctors")
       .update({ status: "inactive" })
@@ -212,7 +273,7 @@ export async function addLabTest(formData: {
   price?: number;
   instructions?: string;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("lab_tests")
       .insert([{ ...formData, is_active: true }])
@@ -225,7 +286,7 @@ export async function addLabTest(formData: {
 }
 
 export async function removeLabTest(id: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { error } = await getDb()
       .from("lab_tests")
       .update({ is_active: false })
@@ -241,7 +302,7 @@ export async function updateLabOrderResult(id: string, resultData: {
   unit?: string;
   is_abnormal?: boolean;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("lab_orders")
       .update({
@@ -278,7 +339,7 @@ export async function createLabOrder(formData: {
   priority: string;
   doctor_name?: string;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb().from("lab_orders").insert([
       {
         patient_name: formData.patient_name,
@@ -311,14 +372,14 @@ export async function createPrescription(formData: {
   diagnosis?: string;
   medicines: { name: string; dosage: string; frequency: string; duration: string; instructions: string }[];
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     // Insert prescription header
     const { data: prescription, error: headerError } = await db.from("prescriptions").insert([
       {
         patient_name: formData.patient_name,
         diagnosis: formData.diagnosis || "",
-        status: "active",
+        is_active: true,
       },
     ]).select().single();
     if (headerError) throw new Error(headerError.message);
@@ -363,7 +424,7 @@ export async function createInvoice(formData: {
   amount: number;
   description?: string;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const invNum = `INV-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0")}`;
     const { data, error } = await getDb().from("invoices").insert([
       {
@@ -371,6 +432,7 @@ export async function createInvoice(formData: {
         patient_name: formData.patient_name,
         total: formData.amount,
         notes: formData.description || "",
+        status: "pending",
         status_text: "pending",
         date: new Date().toISOString().split("T")[0],
       },
@@ -385,19 +447,19 @@ export async function createInvoice(formData: {
 export async function getDashboardMetrics() {
   return safeQuery(async () => {
     const db = getDb();
-    const today = new Date().toISOString().split("T")[0];
+    const today = localDateKey();
 
-    const [apptsToday, totalPatients, revenueToday, followUpsDue] =
+    const [apptsToday, totalPatients, paidInvoices, followUpsDue] =
       await Promise.all([
         db.from("appointments").select("id", { count: "exact", head: true }).eq("appointment_date", today),
         db.from("patients").select("id", { count: "exact", head: true }),
-        db.from("invoices").select("amount"),
+        db.from("invoices").select("total, status_text, date"),
         db.from("appointments").select("id", { count: "exact", head: true }).eq("status", "scheduled"),
       ]);
 
-    const revenueTotal = (revenueToday.data || []).reduce(
-      (sum: number, inv: any) => sum + (Number(inv.amount) || 0), 0
-    );
+    const revenueTotal = (paidInvoices.data || [])
+      .filter((inv: any) => (inv.date || inv.created_at?.slice?.(0, 10)) === today && inv.status_text === "paid")
+      .reduce((sum: number, inv: any) => sum + (Number(inv.total) || 0), 0);
 
     return {
       appointmentsToday: apptsToday.count ?? 0,
@@ -410,13 +472,16 @@ export async function getDashboardMetrics() {
 
 // ─── Check In / Queue ──────────────────────────────────────
 export async function checkInPatient(patientName: string, doctorName: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
-    // Get the next token number
-    const { count } = await db
+    // Next token = max existing token_number + 1 (counting total rows is wrong
+    // because completed rows would still consume a token, and it double-counts).
+    const { data: maxRow } = await db
       .from("queue")
-      .select("id", { count: "exact", head: true });
-    const tokenNumber = (count ?? 0) + 1;
+      .select("token_number")
+      .order("token_number", { ascending: false })
+      .limit(1);
+    const tokenNumber = (maxRow?.[0]?.token_number || 0) + 1;
 
     const { data, error } = await db.from("queue").insert([
       {
@@ -429,6 +494,17 @@ export async function checkInPatient(patientName: string, doctorName: string) {
       },
     ]).select().single();
     if (error) throw new Error(error.message);
+
+    // Keep the matching appointment on today's schedule in sync so the
+    // appointments page/badge reflect the check-in.
+    await db
+      .from("appointments")
+      .update({ status: "checked_in" })
+      .eq("patient_name", patientName)
+      .eq("doctor_name", doctorName)
+      .eq("appointment_date", localDateKey())
+      .eq("status", "scheduled");
+
     await logActivity(`Checked in patient: ${patientName} (Token #${tokenNumber})`);
     return data;
   }, null);
@@ -497,7 +573,7 @@ export async function saveSOAPNotes(formData: {
   plan?: string;
   vitals?: Record<string, any>;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("soap_notes")
       .insert([formData])
@@ -582,7 +658,7 @@ export async function addMedicine(formData: {
   selling_price?: number;
   requires_prescription?: boolean;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("medicines")
       .insert([{ ...formData, is_active: true }])
@@ -595,7 +671,7 @@ export async function addMedicine(formData: {
 }
 
 export async function updateMedicine(id: string, formData: Record<string, any>) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("medicines")
       .update(formData)
@@ -609,7 +685,7 @@ export async function updateMedicine(id: string, formData: Record<string, any>) 
 }
 
 export async function deleteMedicine(id: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { error } = await getDb()
       .from("medicines")
       .update({ is_active: false })
@@ -622,7 +698,7 @@ export async function deleteMedicine(id: string) {
 
 // ─── Stock Movements ──────────────────────────────────────
 export async function adjustStock(medicineId: string, change: number, reason: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     // Get current stock
     const { data: med } = await db.from("medicines").select("id, name, stock_quantity").eq("id", medicineId).single();
@@ -749,11 +825,11 @@ export async function getPatientPortalData(patientId: string) {
 
 // ─── Invoice Management ────────────────────────────────────
 export async function markInvoicePaid(id: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data: inv } = await getDb().from("invoices").select("patient_name, total").eq("id", id).single();
     const { error } = await getDb()
       .from("invoices")
-      .update({ status_text: "paid", paid_at: new Date().toISOString() })
+      .update({ status_text: "paid", status: "paid", paid_at: new Date().toISOString() })
       .eq("id", id);
     if (error) throw new Error(error.message);
     await logActivity(`Marked invoice as paid: ₹${inv?.total || 0} for ${inv?.patient_name || id}`);
@@ -898,7 +974,7 @@ export async function getDoctorAvailability() {
 }
 
 export async function saveDoctorAvailability(doctorId: string, dayOfWeek: string, startTime: string, endTime: string, isAvailable: boolean) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     // Upsert: delete existing and insert
     await db.from("doctor_availability")
@@ -923,15 +999,18 @@ export async function saveDoctorAvailability(doctorId: string, dayOfWeek: string
 
 // ─── Portal Appointment Booking ───────────────────────────
 export async function bookAppointmentFromPortal(patientName: string, doctorName: string, appointmentDate: string, appointmentTime: string, type: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
+    const time = appointmentTime || "09:00";
     const { data, error } = await db.from("appointments").insert([
       {
         patient_name: patientName,
         appointment_date: appointmentDate,
-        appointment_time: appointmentTime,
+        appointment_time: time,
+        start_time: time,
+        end_time: deriveEndTime(time),
         doctor_name: doctorName,
-        type,
+        type: normalizeAppointmentType(type),
         title: `Appointment - ${patientName}`,
         status: "scheduled",
       },
@@ -966,7 +1045,7 @@ export async function uploadPatientDocument(formData: {
   storage_path: string;
   description?: string;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { data, error } = await getDb()
       .from("patient_documents")
       .insert([{ ...formData, shared_with_patient: true }])
@@ -979,7 +1058,7 @@ export async function uploadPatientDocument(formData: {
 }
 
 export async function deletePatientDocument(id: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const { error } = await getDb()
       .from("patient_documents")
       .delete()
@@ -994,7 +1073,7 @@ export async function updateReminderServerAction(formData: {
   channel: "email" | "sms" | "both";
   message?: string;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     const { data: apt } = await db
       .from("appointments")
@@ -1082,7 +1161,7 @@ export async function savePatientNotificationPrefs(formData: {
   reminder_hours_before: number;
   second_reminder_hours: number;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     // Upsert: check existing, then insert or update
     let existingPref = null as any;
@@ -1166,7 +1245,7 @@ export async function saveAutoReminderConfig(formData: {
   window_start_hour: number;
   window_end_hour: number;
 }) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     // Upsert: check if config exists
     const { data: existing } = await db.from("auto_reminder_config").select("id").limit(1).single();
@@ -1184,7 +1263,7 @@ export async function saveAutoReminderConfig(formData: {
 
 // ─── Queue Scheduled Reminders ────────────────────────────
 export async function queueRemindersForAppointment(appointmentId: string) {
-  return safeQuery(async () => {
+  return writeQuery(async () => {
     const db = getDb();
     const { data: apt } = await db
       .from("appointments")
@@ -1327,7 +1406,7 @@ export async function processScheduledReminders() {
 
           await db.from("activity_logs").insert([{
             action: `Reminder sent to ${apt.patient_name} for ${apt.appointment_date} at ${apt.appointment_time?.slice(0,5)} with ${apt.doctor_name} via ${channel} [${reminderLabel}]`,
-            user_name: "Auto-Reminder System",
+            resource_type: "reminder",
             created_at: nowStr,
           }]);
 
