@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/next";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
@@ -33,6 +34,7 @@ export default function RootLayout({
             className: "!bg-surface !border-border !text-primary !rounded-xl !text-sm !shadow-lg",
           }}
         />
+        <Analytics />
       </body>
     </html>
   );
