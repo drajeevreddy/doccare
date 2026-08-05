@@ -24,6 +24,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   getAppointments,
@@ -157,6 +158,14 @@ export default function AppointmentsPage() {
         setLoading(false);
       }).catch(() => setLoading(false));
   }, [selectedDate]);
+
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("new") === "true") {
+      setFormDate(selectedDate);
+      setShowNewAppointment(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (viewMode !== "month") return;
