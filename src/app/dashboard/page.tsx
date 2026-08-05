@@ -24,7 +24,7 @@ interface QueueItem {
   status: string;
 }
 
-interface Activity {
+interface ActivityItem {
   id: string;
   action: string;
   user_name: string;
@@ -40,7 +40,7 @@ export default function DashboardPage() {
   ]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function DashboardPage() {
         ]);
         setAppointments(appts);
         setQueue(q as QueueItem[]);
-        setActivities(acts as Activity[]);
+        setActivities(acts as ActivityItem[]);
         setLoading(false);
       }).catch(() => setLoading(false));
     };
