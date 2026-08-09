@@ -76,6 +76,14 @@ function deriveEndTime(appointmentTime?: string | null): string {
 }
 
 // ─── Patients ───────────────────────────────────────────────
+export async function getProfileByUserId(userId: string) {
+  return safeQuery(async () => {
+    const { data, error } = await getDb().from("profiles").select("full_name, role").eq("id", userId).single();
+    if (error) return null;
+    return data;
+  }, null);
+}
+
 export async function getPatients() {
   return safeQuery(async () => {
     const { data, error } = await getDb()

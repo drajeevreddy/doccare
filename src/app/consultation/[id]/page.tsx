@@ -22,7 +22,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { getPatientById, saveSOAPNotes } from "@/lib/queries";
+import { getPatientById, saveSOAPNotes, getMedicines, getLabTests } from "@/lib/queries";
 
 interface Patient {
   id: string;
@@ -45,15 +45,10 @@ interface MedicineEntry {
   duration: string;
 }
 
-const defaultMedicineOptions = [
-  "Metformin",
-  "Atorvastatin",
-  "Insulin Glargine",
-  "Glimepiride",
-  "Sitagliptin",
-  "Empagliflozin",
-  "Other (Custom)",
-];
+interface LabTest {
+  id: string;
+  name: string;
+}
 
 const dosageOptions = ["500mg", "850mg", "1000mg", "10mg", "20mg", "40mg", "5mg", "25mg"];
 const frequencyOptions = ["Once daily", "Twice daily", "Three times daily", "Before meals", "After meals", "At bedtime", "As needed"];
@@ -72,6 +67,8 @@ export default function ConsultationWorkspace() {
     { name: "", isCustom: false, dosage: "", frequency: "", duration: "" },
   ]);
   const [customMedicineNames, setCustomMedicineNames] = useState<string[]>([]);
+  const [dbMedicines, setDbMedicines] = useState<string[]>([]);
+  const [labTests, setLabTests] = useState<LabTest[]>([]);
 
   // Vitals state
   const [vitals, setVitals] = useState({
@@ -94,9 +91,15 @@ export default function ConsultationWorkspace() {
       setPatient(data as Patient);
       setLoading(false);
     }).catch(() => setLoading(false));
+    getMedicines().then((data) => {
+      setDbMedicines((data as any[]).map((m: any) => m.name));
+    }).catch(() => {});
+    getLabTests().then((data) => {
+      setLabTests(data as LabTest[]);
+    }).catch(() => {});
   }, [patientId]);
 
-  const allMedicineOptions = [...defaultMedicineOptions, ...customMedicineNames.map((n) => `${n} ★`)];
+  const allMedicineOptions = [...dbMedicines, ...customMedicineNames.map((n) => `${n} ★`), "Other (Custom)"];
 
   const updateMedicine = (index: number, field: keyof MedicineEntry, value: string | boolean) => {
     setMedicines((prev) =>
@@ -458,12 +461,12 @@ export default function ConsultationWorkspace() {
 
         <div className="space-y-2">
           <p className="text-[11px] font-medium uppercase tracking-wider text-secondary">Lab Orders</p>
-          {["HbA1c", "Fasting Glucose", "Lipid Profile"].map((test) => (
-            <label key={test} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover cursor-pointer">
+          {labTests.length > 0 ? labTests.slice(0, 10).map((test) => (
+            <label key={test.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover cursor-pointer">
               <input type="checkbox" className="rounded border-border text-accent" />
-              <span className="text-xs text-primary">{test}</span>
+              <span className="text-xs text-primary">{test.name}</span>
             </label>
-          ))}
+          )) : <p className="text-xs text-secondary px-2 py-1">No lab tests configured</p>}
         </div>
       </div>
     </div>

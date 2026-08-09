@@ -5,8 +5,9 @@ import { useSidebarStore } from "@/stores/app-store";
 import { Bell, Command, Menu, Search, Calendar, FlaskConical, Pill, Moon, Sun } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { getNotifications } from "@/lib/queries";
+import { getNotifications, getProfileByUserId } from "@/lib/queries";
 import { useTheme } from "@/components/providers/theme-provider";
+import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 
 const breadcrumbMap: Record<string, string> = {
@@ -25,8 +26,10 @@ const breadcrumbMap: Record<string, string> = {
 export function Header() {
   const pathname = usePathname();
   const { toggleMobile } = useSidebarStore();
+  const { user } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [profile, setProfile] = useState<{ full_name?: string; role?: string }>({});
   const [notifs, setNotifs] = useState<any>({ appointmentsToday: 0, pendingLabs: 0, lowStockItems: 0, appointments: [], labOrders: [], lowStockMeds: [] });
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -35,6 +38,14 @@ export function Header() {
     const interval = setInterval(() => getNotifications().then(setNotifs).catch(() => {}), 60000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      getProfileByUserId(user.id).then((data) => {
+        if (data) setProfile(data);
+      });
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -171,10 +182,10 @@ export function Header() {
 
         {/* User avatar */}
         <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover">
-          <Avatar name="Dr. Smith" size="sm" />
+          <Avatar name={profile.full_name || user?.email || "User"} size="sm" />
           <div className="hidden text-left sm:block">
-            <p className="text-xs font-medium text-primary">Dr. Smith</p>
-            <p className="text-[10px] text-secondary">Cardiologist</p>
+            <p className="text-xs font-medium text-primary">{profile.full_name || user?.email || "User"}</p>
+            <p className="text-[10px] text-secondary capitalize">{profile.role || "Staff"}</p>
           </div>
         </button>
       </div>

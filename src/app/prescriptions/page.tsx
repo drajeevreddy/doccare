@@ -10,7 +10,7 @@ import { downloadPrescriptionPDF, printPrescription } from "@/lib/pdf";
 import { Download, Pill, Plus, Printer, Search, Pen, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getPrescriptions, createPrescription } from "@/lib/queries";
+import { getPrescriptions, createPrescription, getMedicines } from "@/lib/queries";
 
 interface PrescriptionItem {
   id: string;
@@ -31,16 +31,6 @@ interface MedicineEntry {
   duration: string;
   instructions: string;
 }
-
-const defaultMedicineNames = [
-  "Metformin",
-  "Atorvastatin",
-  "Insulin Glargine",
-  "Glimepiride",
-  "Sitagliptin",
-  "Empagliflozin",
-  "Other (Custom)",
-];
 
 const dosageOptions = ["500mg", "850mg", "1000mg", "10mg", "20mg", "40mg", "5mg", "25mg", "50mg", "100mg"];
 const frequencyOptions = [
@@ -66,15 +56,19 @@ export default function PrescriptionsPage() {
     { name: "", isCustom: false, dosage: "", frequency: "", duration: "", instructions: "" },
   ]);
   const [customMedicineNames, setCustomMedicineNames] = useState<string[]>([]);
+  const [dbMedicines, setDbMedicines] = useState<string[]>([]);
 
   useEffect(() => {
     getPrescriptions().then((data) => {
       setPrescriptions(data as PrescriptionItem[]);
       setLoading(false);
     }).catch(() => setLoading(false));
+    getMedicines().then((data) => {
+      setDbMedicines((data as any[]).map((m: any) => m.name));
+    }).catch(() => {});
   }, []);
 
-  const allMedicineOptions = [...defaultMedicineNames, ...customMedicineNames.map((n) => `${n} ★`)];
+  const allMedicineOptions = [...dbMedicines, ...customMedicineNames.map((n) => `${n} ★`), "Other (Custom)"];
 
   const filteredPrescriptions = prescriptions.filter((rx) => {
     const patientName = rx.patients ? `${rx.patients.first_name} ${rx.patients.last_name}` : "";
