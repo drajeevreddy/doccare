@@ -9,7 +9,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { UserPlus, Trash2, Stethoscope, Bell, Calendar, Clock, CheckCircle2, XCircle, Mail, Smartphone, MessageSquare, Zap, RefreshCw, History, Activity } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getDoctors, addDoctor, removeDoctor, getAppointments, getAutoReminderConfig, saveAutoReminderConfig, getScheduledReminderStats, processScheduledReminders } from "@/lib/queries";
+import { getDoctors, addDoctor, removeDoctor, getAppointments, getAutoReminderConfig, saveAutoReminderConfig, getScheduledReminderStats, processScheduledReminders, getClinicSettings, updateClinicSettings } from "@/lib/queries";
 
 interface Doctor {
   id: string;
@@ -32,6 +32,22 @@ export default function SettingsPage() {
   const [doctorName, setDoctorName] = useState("");
   const [doctorSpecialization, setDoctorSpecialization] = useState("");
   const [doctorSaving, setDoctorSaving] = useState(false);
+
+  // Clinic settings state
+  const [clinicName, setClinicName] = useState("");
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [clinicPhone, setClinicPhone] = useState("");
+  const [clinicEmail, setClinicEmail] = useState("");
+  const [clinicAddress, setClinicAddress] = useState("");
+  const [clinicCity, setClinicCity] = useState("");
+  const [clinicState, setClinicState] = useState("");
+  const [clinicZip, setClinicZip] = useState("");
+  const [gstPercentage, setGstPercentage] = useState(0);
+  const [consultationFee, setConsultationFee] = useState(0);
+  const [followupFee, setFollowupFee] = useState(0);
+  const [currency, setCurrency] = useState("INR");
+  const [apptDuration, setApptDuration] = useState(30);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
 
   // Reminder state
   const [emailNotifs, setEmailNotifs] = useState(true);
@@ -59,6 +75,26 @@ export default function SettingsPage() {
       setDoctors(data as Doctor[]);
       setLoadingDoctors(false);
     }).catch(() => setLoadingDoctors(false));
+
+    // Load clinic settings
+    getClinicSettings().then((s: any) => {
+      if (s) {
+        setSettingsId(s.id);
+        setClinicName(s.clinic_name || "");
+        setLicenseNumber(s.license_number || "");
+        setClinicPhone(s.phone || "");
+        setClinicEmail(s.email || "");
+        setClinicAddress(s.address || "");
+        setClinicCity(s.city || "");
+        setClinicState(s.state || "");
+        setClinicZip(s.zip_code || "");
+        setGstPercentage(s.gst_percentage ?? 0);
+        setConsultationFee(s.consultation_fee ?? 0);
+        setFollowupFee(s.followup_fee ?? 0);
+        setCurrency(s.currency || "INR");
+        setApptDuration(s.appointment_duration ?? 30);
+      }
+    }).catch(() => {});
 
     // Fetch upcoming appointments for reminders
     const today = new Date().toISOString().split("T")[0];
@@ -95,9 +131,28 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 800));
-    toast.success("Settings saved successfully");
-    setSaving(false);
+    try {
+      await updateClinicSettings({
+        clinic_name: clinicName,
+        license_number: licenseNumber,
+        phone: clinicPhone,
+        email: clinicEmail,
+        address: clinicAddress,
+        city: clinicCity,
+        state: clinicState,
+        zip_code: clinicZip,
+        gst_percentage: gstPercentage,
+        consultation_fee: consultationFee,
+        followup_fee: followupFee,
+        currency,
+        appointment_duration: apptDuration,
+      });
+      toast.success("Settings saved successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddDoctor = async () => {
@@ -184,14 +239,14 @@ export default function SettingsPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Input label="Clinic Name" placeholder="Enter clinic name" />
-                      <Input label="License Number" placeholder="Enter license number" />
-                      <Input label="Phone" placeholder="+91 1800-123-4567" className="sm:col-span-2" />
-                      <Input label="Email" type="email" placeholder="info@clinic.com" className="sm:col-span-2" />
-                      <Input label="Address" className="sm:col-span-2" placeholder="Clinic address" />
-                      <Input label="City" placeholder="City" />
-                      <Input label="State" placeholder="State" />
-                      <Input label="ZIP Code" placeholder="ZIP code" />
+                      <Input label="Clinic Name" placeholder="Enter clinic name" value={clinicName} onChange={(e) => setClinicName(e.target.value)} />
+                      <Input label="License Number" placeholder="Enter license number" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
+                      <Input label="Phone" placeholder="+91 1800-123-4567" className="sm:col-span-2" value={clinicPhone} onChange={(e) => setClinicPhone(e.target.value)} />
+                      <Input label="Email" type="email" placeholder="info@clinic.com" className="sm:col-span-2" value={clinicEmail} onChange={(e) => setClinicEmail(e.target.value)} />
+                      <Input label="Address" className="sm:col-span-2" placeholder="Clinic address" value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} />
+                      <Input label="City" placeholder="City" value={clinicCity} onChange={(e) => setClinicCity(e.target.value)} />
+                      <Input label="State" placeholder="State" value={clinicState} onChange={(e) => setClinicState(e.target.value)} />
+                      <Input label="ZIP Code" placeholder="ZIP code" value={clinicZip} onChange={(e) => setClinicZip(e.target.value)} />
                     </div>
                   </CardContent>
                 </Card>
@@ -289,10 +344,11 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Input label="GST Percentage" type="number" defaultValue="18" />
-                    <Input label="Consultation Fee" type="number" defaultValue="800" />
-                    <Input label="Follow-up Fee" type="number" defaultValue="500" />
-                    <Input label="Currency" defaultValue="INR" />
+                    <Input label="GST Percentage" type="number" value={String(gstPercentage)} onChange={(e) => setGstPercentage(Number(e.target.value))} />
+                    <Input label="Consultation Fee" type="number" value={String(consultationFee)} onChange={(e) => setConsultationFee(Number(e.target.value))} />
+                    <Input label="Follow-up Fee" type="number" value={String(followupFee)} onChange={(e) => setFollowupFee(Number(e.target.value))} />
+                    <Input label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)} />
+                    <Input label="Appointment Duration (min)" type="number" value={String(apptDuration)} onChange={(e) => setApptDuration(Number(e.target.value))} />
                   </div>
                   <div className="flex justify-end">
                     <Button onClick={handleSave} loading={saving}>Save Changes</Button>

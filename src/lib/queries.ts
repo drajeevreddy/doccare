@@ -1574,3 +1574,47 @@ export async function getScheduledReminderStats() {
     };
   }, { pendingCount: 0, todaySent: 0, totalSent: 0, config: null, recentLogs: [] });
 }
+
+// ─── Clinic Settings ────────────────────────────────────────
+export async function getClinicSettings() {
+  return safeQuery(async () => {
+    const { data, error } = await getDb()
+      .from("clinic_settings")
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+    if (error) return null;
+    return data;
+  }, null);
+}
+
+export async function updateClinicSettings(formData: Record<string, any>) {
+  return writeQuery(async () => {
+    const { data } = await getDb()
+      .from("clinic_settings")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    if (!data?.id) {
+      const { data: created, error: createError } = await getDb()
+        .from("clinic_settings")
+        .insert([{ ...formData, updated_at: new Date().toISOString() }])
+        .select()
+        .single();
+      if (createError) throw new Error(createError.message);
+      await logActivity("Created clinic settings");
+      return created;
+    }
+
+    const { data: updated, error } = await getDb()
+      .from("clinic_settings")
+      .update({ ...formData, updated_at: new Date().toISOString() })
+      .eq("id", data.id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    await logActivity("Updated clinic settings");
+    return updated;
+  }, null);
+}
