@@ -314,7 +314,7 @@ export default function ConsultationWorkspace() {
         </div>
         <div className="space-y-2">
           <p className="text-[11px] font-medium uppercase tracking-wider text-secondary">Diagnosis</p>
-          <Badge variant="warning">{p.diagnosis || "Not specified"}</Badge>
+          <span className="text-xs font-medium text-primary">{p.diagnosis || "No diagnosis recorded"}</span>
         </div>
       </div>
 

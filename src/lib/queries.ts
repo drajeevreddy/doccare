@@ -166,9 +166,22 @@ export async function createAppointment(formData: {
 }) {
   return writeQuery(async () => {
     const appointment_time = formData.appointment_time || "09:00";
+
+    // Try to resolve patient_id from name
+    const nameParts = formData.patient_name.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || firstName;
+    const { data: patient } = await getDb()
+      .from("patients")
+      .select("id")
+      .or(`first_name.ilike.${firstName},last_name.ilike.${lastName}`)
+      .limit(1)
+      .maybeSingle();
+
     const { data, error } = await getDb().from("appointments").insert([
       {
         patient_name: formData.patient_name,
+        patient_id: patient?.id || null,
         appointment_date: formData.appointment_date,
         appointment_time,
         start_time: appointment_time,
@@ -183,6 +196,27 @@ export async function createAppointment(formData: {
     await logActivity(`Scheduled appointment for ${formData.patient_name} with ${formData.doctor_name}`);
     return data;
   }, null);
+}
+
+export async function getAppointmentStats() {
+  return safeQuery(async () => {
+    const db = getDb();
+    const today = localDateKey();
+    const [total, todayCount, cancelled, rescheduled, completed] = await Promise.all([
+      db.from("appointments").select("id", { count: "exact", head: true }),
+      db.from("appointments").select("id", { count: "exact", head: true }).eq("appointment_date", today),
+      db.from("appointments").select("id", { count: "exact", head: true }).eq("status", "cancelled"),
+      db.from("appointments").select("id", { count: "exact", head: true }).eq("status", "rescheduled"),
+      db.from("appointments").select("id", { count: "exact", head: true }).eq("status", "completed"),
+    ]);
+    return {
+      total: total.count ?? 0,
+      today: todayCount.count ?? 0,
+      cancelled: cancelled.count ?? 0,
+      rescheduled: rescheduled.count ?? 0,
+      completed: completed.count ?? 0,
+    };
+  }, { total: 0, today: 0, cancelled: 0, rescheduled: 0, completed: 0 });
 }
 
 export async function cancelAppointment(id: string) {
@@ -208,7 +242,7 @@ export async function rescheduleAppointment(id: string, appointment_date: string
         appointment_time,
         start_time: appointment_time || "09:00",
         end_time: deriveEndTime(appointment_time),
-        status: "scheduled", // 'rescheduled' is not a valid appointment_status enum value
+        status: "rescheduled",
       })
       .eq("id", id);
     if (error) throw new Error(error.message);
@@ -340,12 +374,24 @@ export async function createLabOrder(formData: {
   doctor_name?: string;
 }) {
   return writeQuery(async () => {
+    // Look up patient_id from name
+    const nameParts = formData.patient_name.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || firstName;
+    const { data: patient } = await getDb()
+      .from("patients")
+      .select("id")
+      .or(`first_name.ilike.${firstName},last_name.ilike.${lastName}`)
+      .limit(1)
+      .maybeSingle();
+
     const { data, error } = await getDb().from("lab_orders").insert([
       {
         patient_name: formData.patient_name,
+        patient_id: patient?.id || null,
         test_name: formData.test_name,
         priority: formData.priority,
-        doctor_name: formData.doctor_name || "Dr. Default",
+        doctor_name: formData.doctor_name || null,
         status: "ordered",
       },
     ]).select().single();
@@ -360,7 +406,7 @@ export async function getPrescriptions() {
   return safeQuery(async () => {
     const { data, error } = await getDb()
       .from("prescriptions")
-      .select("*, patients(first_name, last_name)")
+      .select("*, patients(first_name, last_name, date_of_birth, gender), prescription_items(*)")
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data || [];
@@ -374,10 +420,22 @@ export async function createPrescription(formData: {
 }) {
   return writeQuery(async () => {
     const db = getDb();
-    // Insert prescription header
+
+    // Look up patient_id from name
+    const nameParts = formData.patient_name.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || firstName;
+    const { data: patient } = await db
+      .from("patients")
+      .select("id")
+      .or(`first_name.ilike.${firstName},last_name.ilike.${lastName}`)
+      .limit(1)
+      .maybeSingle();
+
     const { data: prescription, error: headerError } = await db.from("prescriptions").insert([
       {
         patient_name: formData.patient_name,
+        patient_id: patient?.id || null,
         diagnosis: formData.diagnosis || "",
         is_active: true,
       },
@@ -474,8 +532,19 @@ export async function getDashboardMetrics() {
 export async function checkInPatient(patientName: string, doctorName: string) {
   return writeQuery(async () => {
     const db = getDb();
-    // Next token = max existing token_number + 1 (counting total rows is wrong
-    // because completed rows would still consume a token, and it double-counts).
+
+    // Look up patient ID from name
+    const nameParts = patientName.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || firstName;
+    const { data: patient } = await db
+      .from("patients")
+      .select("id")
+      .or(`first_name.ilike.${firstName},last_name.ilike.${lastName}`)
+      .limit(1)
+      .maybeSingle();
+
+    // Next token = max existing token_number + 1
     const { data: maxRow } = await db
       .from("queue")
       .select("token_number")
@@ -486,6 +555,7 @@ export async function checkInPatient(patientName: string, doctorName: string) {
     const { data, error } = await db.from("queue").insert([
       {
         patient_name: patientName,
+        patient_id: patient?.id || null,
         doctor_name: doctorName,
         token: String(tokenNumber),
         token_number: tokenNumber,
@@ -495,13 +565,11 @@ export async function checkInPatient(patientName: string, doctorName: string) {
     ]).select().single();
     if (error) throw new Error(error.message);
 
-    // Keep the matching appointment on today's schedule in sync so the
-    // appointments page/badge reflect the check-in.
+    // Keep the matching appointment on today's schedule in sync
     await db
       .from("appointments")
       .update({ status: "checked_in" })
       .eq("patient_name", patientName)
-      .eq("doctor_name", doctorName)
       .eq("appointment_date", localDateKey())
       .eq("status", "scheduled");
 
@@ -574,12 +642,26 @@ export async function saveSOAPNotes(formData: {
   vitals?: Record<string, any>;
 }) {
   return writeQuery(async () => {
-    const { data, error } = await getDb()
+    const db = getDb();
+    const today = localDateKey();
+
+    const { data, error } = await db
       .from("soap_notes")
-      .insert([formData])
+      .insert([{ ...formData, diagnosis: formData.assessment }])
       .select()
       .single();
     if (error) throw new Error(error.message);
+
+    // Update the patient's diagnosis and last_visit
+    if (formData.assessment) {
+      await db.from("patients").update({
+        diagnosis: formData.assessment,
+        last_visit: today,
+      }).eq("id", formData.patient_id);
+    } else {
+      await db.from("patients").update({ last_visit: today }).eq("id", formData.patient_id);
+    }
+
     return data;
   }, null);
 }
@@ -725,13 +807,21 @@ export async function getStockMovements(medicineId?: string) {
 export async function getPatientTimeline(patientId: string) {
   return safeQuery(async () => {
     const db = getDb();
-    // Get patient name for denormalized queries
+    // Get patient name for denormalized queries as fallback
     const { data: patient } = await db.from("patients").select("first_name, last_name").eq("id", patientId).single();
-    const patientName = patient ? `${patient.first_name} ${patient.last_name}` : patientId;
+    const patientName = patient ? `${patient.first_name} ${patient.last_name}` : "";
+
+    // Query by patient_id AND patient_name to catch both normalized and denormalized records
     const [appointments, labOrders, prescriptions, invoices] = await Promise.all([
-      db.from("appointments").select("*").eq("patient_name", patientName).order("appointment_date", { ascending: false }),
-      db.from("lab_orders").select("*").eq("patient_name", patientName).order("created_at", { ascending: false }),
-      db.from("prescriptions").select("*").eq("patient_name", patientName).order("created_at", { ascending: false }),
+      db.from("appointments").select("*")
+        .or(`patient_id.eq.${patientId}${patientName ? `,patient_name.ilike.${patientName}` : ""}`)
+        .order("appointment_date", { ascending: false }),
+      db.from("lab_orders").select("*")
+        .or(`patient_id.eq.${patientId}${patientName ? `,patient_name.ilike.${patientName}` : ""}`)
+        .order("created_at", { ascending: false }),
+      db.from("prescriptions").select("*")
+        .or(`patient_id.eq.${patientId}${patientName ? `,patient_name.ilike.${patientName}` : ""}`)
+        .order("created_at", { ascending: false }),
       db.from("invoices").select("*").eq("patient_id", patientId).order("created_at", { ascending: false }),
     ]);
 
@@ -802,16 +892,20 @@ export async function getPatientByEmail(email: string) {
 export async function getPatientPortalData(patientId: string) {
   return safeQuery(async () => {
     const db = getDb();
-    // First get patient
     const { data: patient } = await db.from("patients").select("*").eq("id", patientId).single();
     if (!patient) return { patient: null, appointments: [], labOrders: [], prescriptions: [] };
 
-    // Query by patient_name text field (denormalized) since forms save patient_name not patient_id FK
     const patientName = `${patient.first_name} ${patient.last_name}`;
     const [appointments, labOrders, prescriptions] = await Promise.all([
-      db.from("appointments").select("*").eq("patient_name", patientName).order("appointment_date", { ascending: false }).limit(10),
-      db.from("lab_orders").select("*").eq("patient_name", patientName).order("created_at", { ascending: false }).limit(10),
-      db.from("prescriptions").select("*").eq("patient_name", patientName).order("created_at", { ascending: false }).limit(10),
+      db.from("appointments").select("*")
+        .or(`patient_id.eq.${patientId},patient_name.ilike.${patientName}`)
+        .order("appointment_date", { ascending: false }).limit(10),
+      db.from("lab_orders").select("*")
+        .or(`patient_id.eq.${patientId},patient_name.ilike.${patientName}`)
+        .order("created_at", { ascending: false }).limit(10),
+      db.from("prescriptions").select("*")
+        .or(`patient_id.eq.${patientId},patient_name.ilike.${patientName}`)
+        .order("created_at", { ascending: false }).limit(10),
     ]);
 
     return {

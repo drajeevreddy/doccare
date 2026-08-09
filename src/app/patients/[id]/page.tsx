@@ -52,6 +52,7 @@ interface Patient {
   height_cm: number;
   weight_kg: number;
   diagnosis: string;
+  last_visit: string;
   status: string;
   insurance_provider: string;
   insurance_id: string;
@@ -239,7 +240,7 @@ export default function PatientDetailPage() {
           { label: "Blood Group", value: p.blood_group || "--", icon: Shield },
           { label: "BMI", value: `${bmi}`, sub: p.weight_kg && p.height_cm ? `${p.weight_kg} kg / ${p.height_cm} cm` : "", icon: Activity },
           { label: "Diagnosis", value: p.diagnosis || "--", icon: HeartPulse },
-          { label: "Last Visit", value: "--", icon: Clock },
+          { label: "Last Visit", value: p.last_visit ? formatDate(p.last_visit) : "--", icon: Clock },
         ].map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-3">

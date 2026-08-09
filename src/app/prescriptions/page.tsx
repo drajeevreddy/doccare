@@ -203,10 +203,19 @@ export default function PrescriptionsPage() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {filteredPrescriptions.map((rx) => {
+              {filteredPrescriptions.map((_rx) => {
+                const rx = _rx as any;
                 const patientName = rx.patient_name || (rx.patients ? `${rx.patients.first_name} ${rx.patients.last_name}` : "Unknown");
                 const doctorName = rx.doctors ? `${rx.doctors.first_name} ${rx.doctors.last_name}` : "Unknown";
-                // prescriptions has no `status` column — derive it from is_active.
+                const patientAge = rx.patients?.date_of_birth ? calculateAge(rx.patients.date_of_birth) : 0;
+                const patientGender = rx.patients?.gender || "Unknown";
+                const rxMedicines = (rx.prescription_items || []).map((item: any) => ({
+                  name: item.medicine_name || "",
+                  dosage: item.dosage || "",
+                  frequency: item.frequency || "",
+                  duration: item.duration || "",
+                  instructions: item.instructions || "",
+                }));
                 const rxStatus = rx.status || (rx.is_active === false ? "inactive" : "active");
                 return (
                   <div key={rx.id} className="flex items-center gap-4 px-5 py-4 hover:bg-hover/50 transition-colors">
@@ -232,12 +241,12 @@ export default function PrescriptionsPage() {
                           downloadPrescriptionPDF({
                             prescriptionId: rx.id.slice(0, 8).toUpperCase(),
                             patientName,
-                            patientAge: 30,
-                            patientGender: "Unknown",
+                            patientAge,
+                            patientGender,
                             doctorName,
                             date: formatDate(rx.created_at),
                             diagnosis: rx.diagnosis || "",
-                            medicines: [],
+                            medicines: rxMedicines,
                           });
                         } catch { toast.error("Could not generate PDF"); }
                       }}
@@ -249,12 +258,12 @@ export default function PrescriptionsPage() {
                           printPrescription({
                             prescriptionId: rx.id.slice(0, 8).toUpperCase(),
                             patientName,
-                            patientAge: 30,
-                            patientGender: "Unknown",
+                            patientAge,
+                            patientGender,
                             doctorName,
                             date: formatDate(rx.created_at),
                             diagnosis: rx.diagnosis || "",
-                            medicines: [],
+                            medicines: rxMedicines,
                           });
                         } catch { toast.error("Could not generate PDF"); }
                       }}

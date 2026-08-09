@@ -35,6 +35,7 @@ import {
   rescheduleAppointment,
   getDoctors,
   checkInPatient,
+  getAppointmentStats,
 } from "@/lib/queries";
 
 interface Appointment {
@@ -143,18 +144,21 @@ export default function AppointmentsPage() {
   const currentMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
   const monthDays = getMonthDays(currentMonth.getFullYear(), currentMonth.getMonth());
   const [monthAppointments, setMonthAppointments] = useState<{ appointment_date: string; status: string }[]>([]);
+  const [stats, setStats] = useState({ total: 0, today: 0, cancelled: 0, rescheduled: 0, completed: 0 });
 
   const refreshAppointments = () => {
     getAppointments(selectedDate).then((data) => setAppointments(data as Appointment[]));
+    getAppointmentStats().then(setStats);
   };
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getAppointments(selectedDate), getQueue(), getDoctors()])
-      .then(([appts, q, docs]) => {
+    Promise.all([getAppointments(selectedDate), getQueue(), getDoctors(), getAppointmentStats()])
+      .then(([appts, q, docs, s]) => {
         setAppointments(appts as Appointment[]);
         setQueue(q as QueueItem[]);
         setDoctors(docs as Doctor[]);
+        setStats(s);
         setLoading(false);
       }).catch(() => setLoading(false));
   }, [selectedDate]);
@@ -252,9 +256,7 @@ export default function AppointmentsPage() {
   };
 
   const activeDoctors = doctors.filter((d) => d.status === "active");
-  const doctorOptions = activeDoctors.length > 0
-    ? activeDoctors.map((d) => d.name)
-    : ["Dr. Sharma", "Dr. Verma"];
+  const doctorOptions = activeDoctors.map((d) => d.name);
 
   return (
     <div className="space-y-6">
@@ -507,20 +509,24 @@ export default function AppointmentsPage() {
             <CardContent className="p-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
+                  <span className="text-xs text-secondary">Today's Appointments</span>
+                  <span className="text-sm font-semibold text-primary">{stats.today}</span>
+                </div>
+                <div className="flex items-center justify-between">
                   <span className="text-xs text-secondary">Total Appointments</span>
-                  <span className="text-sm font-semibold text-primary">{appointments.length}</span>
+                  <span className="text-sm font-semibold text-primary">{stats.total}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-secondary">Cancelled</span>
-                  <span className="text-sm font-semibold text-error">
-                    {appointments.filter((a) => a.status === "cancelled").length}
-                  </span>
+                  <span className="text-sm font-semibold text-error">{stats.cancelled}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-secondary">Rescheduled</span>
-                  <span className="text-sm font-semibold text-warning">
-                    {appointments.filter((a) => a.status === "rescheduled").length}
-                  </span>
+                  <span className="text-sm font-semibold text-warning">{stats.rescheduled}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-secondary">Completed</span>
+                  <span className="text-sm font-semibold text-success">{stats.completed}</span>
                 </div>
               </div>
             </CardContent>
