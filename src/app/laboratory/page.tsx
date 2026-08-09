@@ -2,13 +2,13 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { formatDate } from "@/lib/utils";
 import { downloadLabReportPDF, printLabReport } from "@/lib/pdf";
-import { FlaskConical, Plus, Search, Download, Printer, FileText } from "lucide-react";
+import { FlaskConical, Plus, Search, Printer, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getLabOrders, createLabOrder, getLabTests, addLabTest, removeLabTest, updateLabOrderResult } from "@/lib/queries";

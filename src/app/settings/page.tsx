@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 import { Tabs } from "@/components/ui/tabs";
-import { UserPlus, Trash2, Stethoscope, Bell, Calendar, Clock, CheckCircle2, XCircle, Mail, Smartphone, MessageSquare, Zap, RefreshCw, History, Activity } from "lucide-react";
+import { UserPlus, Trash2, Stethoscope, Bell, Calendar, Clock, CheckCircle2, Mail, Smartphone, Zap, RefreshCw, History, Activity } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getDoctors, addDoctor, removeDoctor, getAppointments, getAutoReminderConfig, saveAutoReminderConfig, getScheduledReminderStats, processScheduledReminders, getClinicSettings, updateClinicSettings } from "@/lib/queries";

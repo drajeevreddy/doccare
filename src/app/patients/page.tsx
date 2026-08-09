@@ -3,7 +3,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { MetricSkeleton } from "@/components/ui/skeleton";
 import { calculateAge, formatDate } from "@/lib/utils";
 import { ChevronDown, Download, Filter, Plus, Search, SlidersHorizontal, Users } from "lucide-react";
 import Link from "next/link";

@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Activity, Calendar, CreditCard, HeartPulse, Stethoscope, TrendingUp, Users, ArrowUpRight, LineChart } from "lucide-react";
+import { Activity, Calendar, HeartPulse, LineChart, Stethoscope, TrendingUp, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getAppointments, getDashboardMetrics, getQueue, getRecentActivity, getPatients } from "@/lib/queries";
 
