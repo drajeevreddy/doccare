@@ -47,6 +47,7 @@ export default function SettingsPage() {
   const [followupFee, setFollowupFee] = useState(0);
   const [currency, setCurrency] = useState("INR");
   const [apptDuration, setApptDuration] = useState(30);
+  const [nvidiaApiKey, setNvidiaApiKey] = useState("");
   const [settingsId, setSettingsId] = useState<string | null>(null);
 
   // Reminder state
@@ -93,6 +94,7 @@ export default function SettingsPage() {
         setFollowupFee(s.followup_fee ?? 0);
         setCurrency(s.currency || "INR");
         setApptDuration(s.appointment_duration ?? 30);
+        setNvidiaApiKey(s.nvidia_api_key || "");
       }
     }).catch(() => {});
 
@@ -146,6 +148,7 @@ export default function SettingsPage() {
         followup_fee: followupFee,
         currency,
         appointment_duration: apptDuration,
+        nvidia_api_key: nvidiaApiKey,
       });
       toast.success("Settings saved successfully");
     } catch (err: any) {
@@ -340,7 +343,7 @@ export default function SettingsPage() {
             content: (
               <Card>
                 <CardHeader>
-                  <CardTitle>Tax & Pricing</CardTitle>
+                  <CardTitle>Tax, Pricing & AI</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -349,7 +352,20 @@ export default function SettingsPage() {
                     <Input label="Follow-up Fee" type="number" value={String(followupFee)} onChange={(e) => setFollowupFee(Number(e.target.value))} />
                     <Input label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)} />
                     <Input label="Appointment Duration (min)" type="number" value={String(apptDuration)} onChange={(e) => setApptDuration(Number(e.target.value))} />
+                    <Input
+                      label="NVIDIA NIM API Key"
+                      type="password"
+                      placeholder="nvapi-..."
+                      value={nvidiaApiKey}
+                      onChange={(e) => setNvidiaApiKey(e.target.value)}
+                      className="sm:col-span-2"
+                    />
                   </div>
+                  <p className="text-xs text-secondary">
+                    Used for AI-powered report comparison. Get your key from{" "}
+                    <a href="https://build.nvidia.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">build.nvidia.com</a>.
+                    The AI is grounded in ADA, WHO, KDIGO, and ACC/AHA clinical guidelines.
+                  </p>
                   <div className="flex justify-end">
                     <Button onClick={handleSave} loading={saving}>Save Changes</Button>
                   </div>

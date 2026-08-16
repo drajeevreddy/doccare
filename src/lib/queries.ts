@@ -1670,3 +1670,78 @@ export async function updateClinicSettings(formData: Record<string, any>) {
     return updated;
   }, null);
 }
+
+// ─── Patient Report Comparison ─────────────────────────────
+export async function getPatientComparisonData(patientId: string) {
+  return safeQuery(async () => {
+    const db = getDb();
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const cutoffDate = localDateKey(threeMonthsAgo);
+
+    const [patient, labOrders, soapNotes, hba1cRecords, bloodSugarLogs] = await Promise.all([
+      db.from("patients").select("*").eq("id", patientId).single(),
+      db.from("lab_orders")
+        .select("*, lab_results(*)")
+        .eq("patient_id", patientId)
+        .gte("created_at", `${cutoffDate}T00:00:00`)
+        .order("created_at", { ascending: false }),
+      db.from("soap_notes")
+        .select("*")
+        .eq("patient_id", patientId)
+        .gte("created_at", `${cutoffDate}T00:00:00`)
+        .order("created_at", { ascending: false }),
+      db.from("hba1c_records")
+        .select("*")
+        .eq("patient_id", patientId)
+        .gte("date", cutoffDate)
+        .order("date", { ascending: false }),
+      db.from("blood_sugar_logs")
+        .select("*")
+        .eq("patient_id", patientId)
+        .gte("recorded_at", `${cutoffDate}T00:00:00`)
+        .order("recorded_at", { ascending: false }),
+    ]);
+
+    // Group lab orders by test name, take latest and previous
+    const labGroups: Record<string, any[]> = {};
+    (labOrders.data || []).forEach((order: any) => {
+      const key = order.test_name || "Unknown Test";
+      if (!labGroups[key]) labGroups[key] = [];
+      labGroups[key].push(order);
+    });
+
+    const labComparison: any[] = [];
+    Object.entries(labGroups).forEach(([testName, orders]) => {
+      orders.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      labComparison.push({
+        test_name: testName,
+        latest: orders[0] || null,
+        previous: orders[1] || null,
+      });
+    });
+
+    // Split soap notes into latest (today) and previous
+    const sortedNotes = (soapNotes.data || []).sort(
+      (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    return {
+      patient: patient.data,
+      labComparison,
+      latestNote: sortedNotes[0] || null,
+      previousNote: sortedNotes[1] || null,
+      allNotes: sortedNotes,
+      hba1cRecords: hba1cRecords.data || [],
+      bloodSugarLogs: bloodSugarLogs.data || [],
+    };
+  }, {
+    patient: null,
+    labComparison: [],
+    latestNote: null,
+    previousNote: null,
+    allNotes: [],
+    hba1cRecords: [],
+    bloodSugarLogs: [],
+  });
+}
