@@ -639,6 +639,19 @@ export async function getRecentActivity() {
   }, []);
 }
 
+// ─── Consultation History ───────────────────────────────────
+export async function getAllConsultationHistory() {
+  return safeQuery(async () => {
+    const { data, error } = await getDb()
+      .from("soap_notes")
+      .select("*, patients(first_name, last_name)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return data || [];
+  }, []);
+}
+
 // ─── Appointment Reminders ──────────────────────────────────
 export async function sendAppointmentReminder(appointmentId: string) {
   return safeQuery(async () => {

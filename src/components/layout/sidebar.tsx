@@ -46,8 +46,7 @@ const navigation = [
     items: [
       { label: "Billing", href: "/billing", icon: CreditCard },
       { label: "Laboratory", href: "/laboratory", icon: FlaskConical },
-      { label: "Pharmacy", href: "/pharmacy", icon: Syringe },
-      { label: "Stock History", href: "/pharmacy/history", icon: Activity },
+      { label: "History", href: "/history", icon: Activity },
       { label: "Analytics", href: "/analytics", icon: Activity },
       { label: "Kiosk", href: "/kiosk", icon: Users },
       { label: "Queue Board", href: "/queue-board", icon: Users },
