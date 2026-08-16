@@ -542,15 +542,41 @@ export async function checkInPatient(patientName: string, doctorName: string) {
     const db = getDb();
 
     // Look up patient ID from name
-    const nameParts = patientName.trim().split(" ");
+    const nameParts = patientName.trim().split(/\s+/);
     const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || firstName;
-    const { data: patient } = await db
-      .from("patients")
-      .select("id")
-      .or(`first_name.ilike.${firstName},last_name.ilike.${lastName}`)
-      .limit(1)
-      .maybeSingle();
+    const lastName = nameParts.slice(1).join(" ") || "";
+
+    let patientId: string | null = null;
+    let isWalkIn = false;
+
+    if (firstName) {
+      const nameQuery = lastName
+        ? `and(first_name.ilike.${firstName},last_name.ilike.${lastName})`
+        : `first_name.ilike.${firstName}`;
+      const { data: patient } = await db
+        .from("patients")
+        .select("id")
+        .or(nameQuery)
+        .limit(1)
+        .maybeSingle();
+      patientId = patient?.id || null;
+    }
+
+    // Walk-in: no existing patient record -> auto-register
+    if (!patientId) {
+      const { data: newPatient, error: patientError } = await db
+        .from("patients")
+        .insert([{
+          first_name: firstName || patientName.trim(),
+          last_name: lastName || "",
+          is_walk_in: true,
+        }])
+        .select("id")
+        .single();
+      if (patientError) throw new Error(patientError.message);
+      patientId = newPatient.id;
+      isWalkIn = true;
+    }
 
     // Next token = max existing token_number + 1
     const { data: maxRow } = await db
@@ -563,12 +589,13 @@ export async function checkInPatient(patientName: string, doctorName: string) {
     const { data, error } = await db.from("queue").insert([
       {
         patient_name: patientName,
-        patient_id: patient?.id || null,
+        patient_id: patientId,
         doctor_name: doctorName,
         token: String(tokenNumber),
         token_number: tokenNumber,
         status: "checked_in",
         priority: "normal",
+        is_walk_in: isWalkIn,
       },
     ]).select().single();
     if (error) throw new Error(error.message);
@@ -672,6 +699,18 @@ export async function saveSOAPNotes(formData: {
 
     return data;
   }, null);
+}
+
+export async function getConsultationHistory(patientId: string) {
+  return safeQuery(async () => {
+    const { data, error } = await getDb()
+      .from("soap_notes")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }, []);
 }
 
 // ─── Patient Documents ─────────────────────────────────────

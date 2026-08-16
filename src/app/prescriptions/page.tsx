@@ -201,7 +201,7 @@ export default function PrescriptionsPage() {
                 const rx = _rx as any;
                 const patientName = rx.patient_name || (rx.patients ? `${rx.patients.first_name} ${rx.patients.last_name}` : "Unknown");
                 const doctorName = rx.doctors ? `${rx.doctors.first_name} ${rx.doctors.last_name}` : "Unknown";
-                const patientAge = rx.patients?.date_of_birth ? calculateAge(rx.patients.date_of_birth) : 0;
+                const patientAge = calculateAge(rx.patients?.date_of_birth);
                 const patientGender = rx.patients?.gender || "Unknown";
                 const rxMedicines = (rx.prescription_items || []).map((item: any) => ({
                   name: item.medicine_name || "",

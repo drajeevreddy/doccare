@@ -13,7 +13,7 @@ interface MedicineItem {
 interface PrescriptionData {
   prescriptionId: string;
   patientName: string;
-  patientAge: number;
+  patientAge: string | number;
   patientGender: string;
   doctorName: string;
   date: string;

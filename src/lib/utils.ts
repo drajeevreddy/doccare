@@ -54,15 +54,17 @@ export function generateInvoiceNumber(): string {
   return `INV-${year}${month}-${random}`;
 }
 
-export function calculateAge(dateOfBirth: string): number {
+export function calculateAge(dateOfBirth: string | null | undefined): string {
+  if (!dateOfBirth) return "--";
   const today = new Date();
   const birth = new Date(dateOfBirth);
+  if (isNaN(birth.getTime())) return "--";
   let age = today.getFullYear() - birth.getFullYear();
   const monthDiff = today.getMonth() - birth.getMonth();
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
     age--;
   }
-  return age;
+  return String(age);
 }
 
 export function calculateBMI(weightKg: number, heightCm: number): number {

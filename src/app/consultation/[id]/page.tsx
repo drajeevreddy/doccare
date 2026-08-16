@@ -22,7 +22,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { getPatientById, saveSOAPNotes, getMedicines, getLabTests } from "@/lib/queries";
+import { getPatientById, saveSOAPNotes, getMedicines, getLabTests, getConsultationHistory } from "@/lib/queries";
 
 interface Patient {
   id: string;
@@ -50,6 +50,17 @@ interface LabTest {
   name: string;
 }
 
+interface ConsultationRecord {
+  id: string;
+  created_at: string;
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  diagnosis: string;
+  vitals: Record<string, any>;
+}
+
 const dosageOptions = ["500mg", "850mg", "1000mg", "10mg", "20mg", "40mg", "5mg", "25mg"];
 const frequencyOptions = ["Once daily", "Twice daily", "Three times daily", "Before meals", "After meals", "At bedtime", "As needed"];
 
@@ -69,6 +80,9 @@ export default function ConsultationWorkspace() {
   const [customMedicineNames, setCustomMedicineNames] = useState<string[]>([]);
   const [dbMedicines, setDbMedicines] = useState<string[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const [history, setHistory] = useState<ConsultationRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Vitals state
   const [vitals, setVitals] = useState({
@@ -97,6 +111,10 @@ export default function ConsultationWorkspace() {
     getLabTests().then((data) => {
       setLabTests(data as LabTest[]);
     }).catch(() => {});
+    getConsultationHistory(patientId).then((data) => {
+      setHistory(data as ConsultationRecord[]);
+      setHistoryLoading(false);
+    }).catch(() => setHistoryLoading(false));
   }, [patientId]);
 
   const allMedicineOptions = [...dbMedicines, ...customMedicineNames.map((n) => `${n} ★`), "Other (Custom)"];
@@ -328,6 +346,9 @@ export default function ConsultationWorkspace() {
             <h2 className="text-sm font-semibold text-primary">Consultation Notes</h2>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)}>
+              <ClipboardList className="h-3.5 w-3.5" /> History ({history.length})
+            </Button>
             <Button variant="outline" size="sm" onClick={handleSave} disabled={saving} loading={saving}>
               <Save className="h-3.5 w-3.5" /> Save Draft
             </Button>
@@ -336,6 +357,47 @@ export default function ConsultationWorkspace() {
             </Button>
           </div>
         </div>
+
+        {showHistory && (
+          <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-primary">Consultation History</p>
+              <span className="text-xs text-secondary">{history.length} previous visit{history.length === 1 ? "" : "s"}</span>
+            </div>
+            {historyLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-12 bg-hover rounded animate-pulse" />
+                ))}
+              </div>
+            ) : history.length === 0 ? (
+              <p className="text-xs text-secondary py-2">No previous consultations</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {history.map((record) => (
+                  <div key={record.id} className="rounded-md border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-primary">
+                        {record.created_at ? new Date(record.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                      </span>
+                      {record.vitals && Object.keys(record.vitals).length > 0 && (
+                        <span className="text-[10px] text-secondary">
+                          BP: {record.vitals.bp_systolic || "—"}/{record.vitals.bp_diastolic || "—"} &middot; Pulse: {record.vitals.pulse || "—"}
+                        </span>
+                      )}
+                    </div>
+                    {record.assessment && (
+                      <p className="text-xs text-secondary mt-1">Diagnosis: {record.assessment}</p>
+                    )}
+                    {record.plan && (
+                      <p className="text-xs text-secondary mt-0.5">Plan: {record.plan}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-4">
           <div>
